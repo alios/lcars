@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable #-}
 
-module Lcars.DHT.Types (DHTHash, DHT(..)) where
+module Lcars.DHT.Types (DHTHash, DHT(..), DHTCommand(..), DHTResponse(..), dhtLocalMap) where
 
 import Data.Binary (Binary(..), Get, Put)
 import qualified Data.Binary as Bin
@@ -9,6 +9,7 @@ import qualified Data.Binary.Put as Bin
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
+import Data.Data (Data)
 import Data.Map (Map)
 import Data.Typeable (Typeable)
 
@@ -25,24 +26,59 @@ data DHTCommand =
   DHTPut PutID ByteString 
   deriving (Eq, Typeable, Show)
 
+data DHTResponse = 
+  DHTPutRequestAck PutID |
+  DHTPutDone PutID DHTHash
+  deriving (Eq, Typeable, Show)
+
 newtype DHT h = DHT (LocalDHT h, DHTHash)
 
-instance Binary DHTCommand where
-  put (DHTPut putid bs) = do    
-    Bin.put (0x24 :: Bin.Word8)
-    Bin.put putid
-    Bin.put $ BS.length bs
-    Bin.put bs
+dhtLocalMap :: DHT t -> LocalDHT t
+dhtLocalMap (DHT (dht, _)) = dht
+
+
+instance Binary DHTResponse where
+  put (DHTPutRequestAck putid) = do
+    put (0x42 :: Bin.Word8)
+    put putid
+  put (DHTPutDone putid h) = do
+    put (0x43 :: Bin.Word8)
+    put putid
+    put h
   get = do
     magic <- Bin.getWord8
-    if (not $ magic == 0x24) 
-      then fail "magic byte 0x23 not found in parsing DHTCmd LcarsDHT"
-      else do                      
+    case (magic) of 
+      0x42 -> fmap DHTPutRequestAck get
+      0x43 -> do 
+        putid <- get
+        h <- get
+        return $ DHTPutDone putid h
+        
+instance Binary DHTCommand where
+  put (DHTPutRequest l putid) = do
+    put (0x23 :: Bin.Word8)
+    put l
+    put putid
+  put (DHTPut putid bs) = do    
+    put (0x24 :: Bin.Word8)
+    put putid
+    put $ BS.length bs
+    put bs
+  get = do
+    magic <- Bin.getWord8
+    case (magic) of 
+      0x23 -> do
+        l <- get
+        putid <- get
+        return $ DHTPutRequest l putid
+      0x24 -> do                      
         putid <- get :: Get PutID
         let putid = undefined
         l <- (get :: Get Int)
         bs <- Bin.getBytes l
         return $ DHTPut putid bs
+      i -> fail $ "unknown magic while parsing DHTCommand: " ++ show i
+      
 
 instance Binary DHTHash where
   put h =     

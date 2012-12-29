@@ -17,21 +17,30 @@ import qualified Data.Map as Map
 
 import Control.Monad.IO.Class
 
-
 dhtProcess :: [NodeId] -> Process ()
 dhtProcess ns =
   let initState = undefined
   in do 
-    mainDhtServer <- start initState dhtServer
+    (mainDhtServerId, mainDhtMonitor) <- startMonitor initState dhtServer
     _ <- expect :: Process ()
     return ()
 
-dhtServer :: LocalServer (DHT h)
+dhtServer :: LocalServer (DHT DHTHash)
 dhtServer = defaultServer {
   initHandler = dhtInitHandler,
-  handlers = []
+  handlers = [handle handleDHTCmdRequest]
   }
 
+handleDHTCmdRequest :: Handler (DHT DHTHash) DHTCommand DHTResponse
+handleDHTCmdRequest r@(DHTPutRequest l putid) = do
+  trace $ "handling DHTPutRequest: " ++ show r
+  ok $ DHTPutRequestAck putid
+handleDHTCmdRequest r@(DHTPut putid bs) = do
+  trace $ "handling DHTPutRequest: " ++ show r
+  let h = hashStrict bs
+  modifyState $ (\(DHT (dht, i)) -> DHT (Map.insert h bs dht, i))
+  ok $ DHTPutDone putid h
+  
 dhtInitHandler :: InitHandler (DHT h)
 dhtInitHandler = do
   trace "dhtInitHandler"

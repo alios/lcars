@@ -28,3 +28,4 @@ main = do
   mainf args
 
 testmain = mainf [ "dhthost", "localhost", "9000" ]
+
