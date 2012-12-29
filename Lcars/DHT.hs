@@ -1,29 +1,34 @@
-module Lcars.DHT (dhtProcess, DHT) where
+module Lcars.DHT (DHT, newDHT, dhtServer, dhtRandomHash, dhtHash, dhtHashStrict) where
 
 import Lcars.DHT.Types
 
 import Control.Distributed.Process
 import Control.Distributed.Platform
-import Control.Distributed.Platform.GenServer
+import Control.Distributed.Platform.GenServer as GenServer
 
 import Crypto.Classes
 import Crypto.Random.API
-
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-
 import qualified Data.Map as Map
-
 import Control.Monad.IO.Class
 
-dhtProcess :: [NodeId] -> Process ()
-dhtProcess ns =
-  let initState = undefined
-  in do 
-    (mainDhtServerId, mainDhtMonitor) <- startMonitor initState dhtServer
-    _ <- expect :: Process ()
-    return ()
+newDHT :: (MonadIO m, Functor m) => m (DHT DHTHash)
+newDHT = do
+  nodeid <- dhtRandomHash
+  return $ DHT nodeid Map.empty 
+
+
+dhtRandomHash :: (MonadIO m, Functor m) => m DHTHash
+dhtRandomHash = fmap dhtHashStrict $ liftIO $ getSystemEntropy 4096 
+
+dhtHash :: BL.ByteString -> DHTHash
+dhtHash = hash
+
+dhtHashStrict :: ByteString -> DHTHash
+dhtHashStrict = dhtHash . BL.pack . BS.unpack
+
 
 dhtServer :: LocalServer (DHT DHTHash)
 dhtServer = defaultServer {
@@ -32,23 +37,16 @@ dhtServer = defaultServer {
   }
 
 handleDHTCmdRequest :: Handler (DHT DHTHash) DHTCommand DHTResponse
-handleDHTCmdRequest r@(DHTPutRequest l putid) = do
+handleDHTCmdRequest r@(DHTPutRequest l putid clientid) = do
   trace $ "handling DHTPutRequest: " ++ show r
   ok $ DHTPutRequestAck putid
 handleDHTCmdRequest r@(DHTPut putid bs) = do
   trace $ "handling DHTPutRequest: " ++ show r
-  let h = hashStrict bs
-  modifyState $ (\(DHT (dht, i)) -> DHT (Map.insert h bs dht, i))
+  let h = dhtHashStrict bs
+  modifyState $ (\(DHT i dht) -> DHT i (Map.insert h bs dht))
   ok $ DHTPutDone putid h
   
-dhtInitHandler :: InitHandler (DHT h)
+dhtInitHandler :: InitHandler (DHT DHTHash)
 dhtInitHandler = do
   trace "dhtInitHandler"
-  nodeid <- fmap hashStrict $ liftIO $ getSystemEntropy 4096
-  trace $ "node id: " ++ show nodeid
-  putState $ DHT (Map.empty, nodeid)
   initOk Infinity
-
-hashStrict :: ByteString -> DHTHash
-hashStrict = hash . BL.pack . BS.unpack
-

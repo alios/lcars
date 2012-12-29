@@ -6,15 +6,14 @@ import Control.Distributed.Process.Node (initRemoteTable)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
 import Lcars
-
-
+import Lcars.DHT.SimpleLocalnet
 
 mainf ::[String] -> IO ()
 mainf args = 
   case args of
     ["dhthost", host, port] -> do
       backend <- initializeBackend host port initRemoteTable
-      startMaster backend (dhtProcess)
+      startMaster backend (dhtLocalNetProcess backend)
 {-    ["dhtput", host, port, key, value] -> do
       backend <- initializeBackend host port initRemoteTable
       let v = BS.pack . UTF8.encode $ value

@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable #-}
 
-module Lcars.DHT.Types (DHTHash, DHT(..), DHTCommand(..), DHTResponse(..), dhtLocalMap) where
+module Lcars.DHT.Types (DHTHash, DHT(..), DHTCommand(..), DHTResponse(..)) where
+
+import Control.Distributed.Platform.GenServer
 
 import Data.Binary (Binary(..), Get, Put)
 import qualified Data.Binary as Bin
@@ -22,19 +24,19 @@ type LocalDHT h = Map h ByteString
 type PutID = DHTHash
 
 data DHTCommand = 
-  DHTPutRequest Integer PutID  |
-  DHTPut PutID ByteString 
+  DHTPutRequest !Integer !PutID !ServerId |
+  DHTPut !PutID !ByteString
   deriving (Eq, Typeable, Show)
 
 data DHTResponse = 
-  DHTPutRequestAck PutID |
-  DHTPutDone PutID DHTHash
+  DHTPutRequestAck !PutID |
+  DHTPutDone !PutID !DHTHash
   deriving (Eq, Typeable, Show)
 
-newtype DHT h = DHT (LocalDHT h, DHTHash)
-
-dhtLocalMap :: DHT t -> LocalDHT t
-dhtLocalMap (DHT (dht, _)) = dht
+data DHT h = DHT {
+  dhtId :: h,
+  dhtLocalMap :: LocalDHT h
+}
 
 
 instance Binary DHTResponse where
@@ -55,10 +57,11 @@ instance Binary DHTResponse where
         return $ DHTPutDone putid h
         
 instance Binary DHTCommand where
-  put (DHTPutRequest l putid) = do
+  put (DHTPutRequest l putid clientid) = do
     put (0x23 :: Bin.Word8)
     put l
     put putid
+    put clientid
   put (DHTPut putid bs) = do    
     put (0x24 :: Bin.Word8)
     put putid
@@ -70,7 +73,8 @@ instance Binary DHTCommand where
       0x23 -> do
         l <- get
         putid <- get
-        return $ DHTPutRequest l putid
+        clientid <- get
+        return $ DHTPutRequest l putid clientid
       0x24 -> do                      
         putid <- get :: Get PutID
         let putid = undefined
