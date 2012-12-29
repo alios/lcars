@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                lcars
-version:             0.1.0.0
+version:             0.1.1.0
 -- synopsis:            
 -- description:         
 homepage:            https://github.com/alios/lcars
@@ -14,11 +14,7 @@ maintainer:          alios@alios.org
 category:            Network
 build-type:          Simple
 cabal-version:       >=1.8
-
-library
-  exposed-modules:   Lcars
-  ghc-options:       -Wall -O2
-  build-depends:     base >= 4 && < 5
+build-depends:       base >= 4 && < 5
                ,     distributed-process >= 0.4.1
                ,     distributed-process-p2p >= 0.1.1.0
                ,     cryptohash >= 0.8.1
@@ -45,39 +41,31 @@ library
                ,     openpgp-crypto-api
                ,     unix
                ,     process
+
+
+library
+  exposed-modules:   Lcars, Lcars.DHT
+  ghc-options:       -Wall -O2
+  extensions:        TypeSynonymInstances
+               ,     DeriveDataTypeable
+  build-depends:     base
+               ,     transformers >= 0.2
+               ,     binary >= 0.5
+               ,     containers >= 0.4
+               ,     bytestring >= 0.9
+               ,     crypto-api >= 0.10
+               ,     crypto-random-api >= 0.1
+               ,     cryptohash >= 0.8
+               ,     distributed-process >= 0.4
+               ,     distributed-process-platform >= 0.1
+               ,     cereal >= 0.3
+
 
 executable lcars
   main-is:             Main.hs
-  -- other-modules:       
+  Hs-Source-Dirs:      lcars_main
+  ghc-options:         -threaded -O2
   build-depends:       base
                ,       lcars
-               ,     distributed-process >= 0.4.1
-               ,     distributed-process-p2p >= 0.1.1.0
-               ,     cryptohash >= 0.8.1
-               ,     stm >= 2.4
-               ,     monad-control >= 0.3
-               ,     transformers >= 0.3
-               ,     transformers-base >= 0.3
-               ,     crypto-api >= 0.10
-               ,     cryptocipher >= 0.3
-               ,     conduit >= 0.5
-               ,     crypto-conduit >= 0.4 
-               ,     crypto-random-api
-               ,     monadcryptorandom >= 0.5
-               ,     filepath
-               ,     directory
-               ,     text
-               ,     cereal
-               ,     bytestring
-               ,     syb
-               ,     network >= 2.4
-               ,     mtl >= 2
-               ,     crypto-pubkey-types
-               ,     binary
-               ,     utf8-string
-               ,     openpgp
-               ,     openpgp-crypto-api
-               ,     unix
-               ,     process
-
-  ghc-options:         -threaded -O2
+               ,       distributed-process >= 0.4
+               ,       distributed-process-simplelocalnet >= 0.2
