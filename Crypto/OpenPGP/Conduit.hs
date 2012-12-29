@@ -11,11 +11,37 @@ import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Data.Binary as B
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.List as L
 import Data.Conduit
 import Data.Conduit.Binary
+import Data.Conduit.List
 import qualified Data.Conduit.Util as UC 
 import qualified Data.OpenPGP as OpenPGP
 import qualified Data.OpenPGP.CryptoAPI as OpenPGP
+
+
+messageList' :: (Monad m) => Bool -> OpenPGP.Message -> GSource m OpenPGP.Packet
+messageList' False (OpenPGP.Message ps) = sourceList ps
+messageList' True  msg = 
+  let source = messageList' False msg
+  in do
+    
+      (cs,ncs) = partition isCompressedPacket ps
+      dcs = concat $  L.map (\(OpenPGP.CompressedDataPacket _ (OpenPGP.Message sps)) -> sps) cs
+  in sourceList $ ncs ++ dcs
+
+messageList :: Monad m => OpenPGP.Message -> GSource m OpenPGP.Packet
+messageList = messageList' False
+
+
+isOnePassSignaturePacket (OpenPGP.OnePassSignaturePacket _ _ _ _ _ _) = True
+isOnePassSignaturePacket _ = False
+isOnePassSignatureFilter = Data.Conduit.List.filter isOnePassSignaturePacket
+
+isCompressedPacket (OpenPGP.CompressedDataPacket _ _) = True
+isCompressedPacket _ = False
+isCompressedPacketFilter = Data.Conduit.List.filter isCompressedPacket
+      
 
 keyGenSource :: MonadResource m => String -> String -> String -> 
                     Pipe l i o u m (OpenPGP.Message, OpenPGP.Message)
