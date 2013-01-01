@@ -62,50 +62,29 @@ data DHTConfig = DHTConfig {
 defaultDHTConfig :: DHTConfig
 defaultDHTConfig = DHTConfig 0
 
+dhtHashDistance :: DHTHash -> DHTHash -> Integer
+dhtHashDistance a b = abs $ dhtHashToInteger a + dhtHashToInteger b
+
+dhtHashFromInteger :: Integer -> DHTHash
+dhtHashFromInteger i = 
+  let bs = f (ol - 8) i
+      ol = unTagged (outputLength :: Tagged DHTHash BitLength) 
+      f l i = f' l i
+      f' (-8) _ = [] 
+      f' n i = (fromInteger ((i `shiftR` (n) ) .&. 0xff)) : f' (n-8) i
+    in either error id $ Ser.decode $ BS.pack bs
+
+dhtHashToInteger :: DHTHash -> Integer
+dhtHashToInteger h =
+  foldl (\i w -> (i `shiftL` 8) .|. toInteger w) (0 :: Integer) $ 
+  BS.unpack $ Ser.encode h
+
+instance Binary DHTHash where
+  put = put . dhtHashToInteger
+  get = fmap dhtHashFromInteger get
+
+
 
 $(derive makeBinary ''DHTCommand)
 $(derive makeBinary ''DHTResponse)
 
-instance Num DHTHash where
-  a + b = fromInteger $ toInteger a + toInteger b
-  a * b = fromInteger $ toInteger a * toInteger b
-  abs = fromInteger . abs . toInteger
-  signum = fromInteger . signum . toInteger
-  fromInteger i = 
-    let bs = f (ol - 8) i
-        ol = unTagged (outputLength :: Tagged DHTHash BitLength) 
-        f l i = f' l i
-        f' (-8) _ = [] 
-        f' n i = (fromInteger ((i `shiftR` (n) ) .&. 0xff)) : f' (n-8) i
-    in either error id $ Ser.decode $ BS.pack bs
-  
-instance Enum DHTHash where
-  fromEnum = fromEnum . toInteger
-  toEnum = fromInteger . toEnum
-  
-instance Real DHTHash where
-  toRational = toRational . toInteger
-       
-instance Integral DHTHash where
-  toInteger h = 
-    foldl (\i w -> (i `shiftL` 8) .|. toInteger w) (0 :: Integer) $ 
-    BS.unpack $ Ser.encode h
-  quotRem a b = 
-    let (qi, ri) = quotRem (toInteger a) (toInteger b) 
-    in (fromInteger qi, fromInteger ri)
-  
-instance Binary DHTHash where
-  put h =     
-    let ser = Ser.encodeLazy h
-    in do 
-      put $ toInteger $ BL.length ser
-      putLazyByteString ser
-  get = do
-    ml <- get
-    case (ml) of 
-      Left err -> fail $ "unable to parse hash length: " ++ err
-      Right l  -> 
-        do ser <- getLazyByteString $ fromInteger l
-           case (Ser.decodeLazy ser) of
-             Left err -> fail $ "unable to parse hash: " ++ err
-             Right h -> return h

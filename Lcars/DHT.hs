@@ -38,8 +38,8 @@ dhtHash = hash
 dhtHashStrict :: ByteString -> DHTHash
 dhtHashStrict = dhtHash . BL.pack . BS.unpack
 
-dhtPutRequest :: ByteString -> ServerId -> Process DHTHash
-dhtPutRequest bs n = do
+dhtPutRequest :: ServerId -> ByteString -> Process DHTHash
+dhtPutRequest n bs = do
   rnd <- dhtRandomHash
   pid <- getSelfPid
   let l = toInteger $ BS.length bs

@@ -9,6 +9,9 @@ import Control.Distributed.Platform
 import Control.Distributed.Platform.GenServer as GenServer
 import Control.Distributed.Platform.Timer as Timer
 
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString as BS
+import qualified Data.Binary as Bin
 
 
 dhtLocalNetProcess :: Backend -> [NodeId] -> Process ()
@@ -17,11 +20,14 @@ dhtLocalNetProcess backend peers = do
   dht <- newDHT
   say "starting DHT Server"
   (mainDhtServerId, mainDhtMonitor) <- startMonitor dht $ dhtServer
-  rnd <- dhtRandomHash
-  pid <- getSelfPid
-  let p = DHTPutRequest 23 rnd pid
-  say $ "sending out " ++ show p ++ " to " ++ show mainDhtServerId
---  resp <- (GenServer.call mainDhtServerId p) :: Process DHTResponse
---  say $ "show got " ++ show resp
-  _ <- expect :: Process ()
+  resp <- sequence . take 10 . repeat $ 
+          dhtRandomTestPut mainDhtServerId
+  say $ "show got " ++ show resp
+
   return ()
+
+
+dhtRandomTestPut serverId = do
+  rnd <- dhtRandomHash
+  dhtPutRequest serverId $ 
+    BS.concat . BL.toChunks  . Bin.encode $ rnd
