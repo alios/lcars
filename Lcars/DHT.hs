@@ -82,7 +82,6 @@ newDHTPut dht = DHTPutState {
   }
 
 
-
 dhtLocalServer :: LocalServer (DHT DHTHash)
 dhtLocalServer = defaultServer {
   handlers = [handle $ handleLDHTPutCmdRequest ]
