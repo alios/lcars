@@ -8,7 +8,8 @@ import Control.Distributed.Process.Backend.SimpleLocalnet
 import Lcars
 import Lcars.DHT.SimpleLocalnet
 
-mainf ::[String] -> IO ()
+
+mainf :: [String] -> IO ()
 mainf args = 
   case args of
     ["dhthost", host, port] -> do

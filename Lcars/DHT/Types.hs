@@ -1,15 +1,18 @@
 {-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable, TemplateHaskell #-}
 
 module Lcars.DHT.Types ( DHTHash
+                       , dhtHashDistance
                        , DHT(..)
                        , dhtLocalMapLength
+                       , dhtLocalMapInsert
+                       , dhtPeersCloser
                        , DHTConfig(..)
                        , defaultDHTConfig
                        , DHTCommand(..)
                        , DHTResponse(..)) where
 
+import Control.Concurrent.STM
 import Control.Distributed.Platform.GenServer
-
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
@@ -18,7 +21,10 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
+import Data.Maybe
+import qualified Data.Set as Set
 import Data.Tagged
 import Data.Typeable (Typeable)
 
@@ -30,12 +36,13 @@ import Crypto.Classes
 import Crypto.Hash.Skein512 (Skein512)
 
 type DHTHash = Skein512
-type LocalDHT h = Map h ByteString
+type LocalDHT h = TMVar (Map h ByteString)
 type PutID = DHTHash
 
 data DHTCommand = 
   DHTPutRequest !Integer !PutID !ServerId |  
-  DHTPut !PutID !ByteString
+  DHTPut !PutID !ByteString |
+  DHTRedistribute !DHTHash
   deriving (Eq, Typeable, Show)
 
 data DHTResponse = 
@@ -47,13 +54,34 @@ data DHT h = DHT {
   dhtId :: h,
   dhtConfig :: DHTConfig,
   dhtLocalMap :: LocalDHT h,
-  dhtAllocators :: Map h DHTCommand
+  dhtAllocators :: Map h DHTCommand,
+  dhtPeers :: Map h ServerId
 }
 
-dhtLocalMapLength :: DHT h -> Integer
+dhtLocalMapLength :: DHT h -> IO Integer
 dhtLocalMapLength dht = 
-  Map.foldl (\l bs -> l + (toInteger . BS.length $ bs)) 0 
-  $ dhtLocalMap dht
+  let lenfold = Map.foldl (\l bs -> l + (toInteger . BS.length $ bs)) 0 
+  in fmap lenfold $ atomically $ readTMVar $ dhtLocalMap dht
+
+dhtLocalMapInsert :: DHT DHTHash -> DHTHash -> ByteString -> IO ()
+dhtLocalMapInsert dht k v = atomically $ do
+  let m' = dhtLocalMap dht
+  m <- takeTMVar m'
+  putTMVar m' $ Map.insert k v m
+
+dhtPeersCloser :: DHT DHTHash -> DHTHash -> [ServerId]  
+dhtPeersCloser dht h = 
+  let mydist = dhtHashDistance h $ dhtId dht
+      ks = Map.keysSet . dhtPeers $ dht
+      fkl = 
+        Set.toList  $ Set.filter 
+        (\k -> dhtHashDistance h k < mydist) ks
+      sfkl = 
+        List.sortBy 
+        (\a b -> (dhtHashDistance h a)  `compare` 
+                 (dhtHashDistance h b)) fkl
+  in [ fromJust $ Map.lookup sk (dhtPeers dht) | sk <- sfkl ]
+
 
 data DHTConfig = DHTConfig {
   dhtConfigMaxTableSize :: Integer
@@ -82,8 +110,6 @@ dhtHashToInteger h =
 instance Binary DHTHash where
   put = put . dhtHashToInteger
   get = fmap dhtHashFromInteger get
-
-
 
 $(derive makeBinary ''DHTCommand)
 $(derive makeBinary ''DHTResponse)
