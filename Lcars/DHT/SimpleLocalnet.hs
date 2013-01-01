@@ -15,10 +15,14 @@ import qualified Data.Binary as Bin
 
 
 dhtLocalNetProcess :: Backend -> [NodeId] -> Process ()
-dhtLocalNetProcess backend peers = dhtLocalProcess
+dhtLocalNetProcess backend peers = do
+  say "creating new DHT"
+  dht <- dhtLocalProcess
+  resp <- sequence . take 10 . repeat $ 
+          dhtRandomTestPut dht
+  say $ "show got " ++ show resp
   
   {-
-  say "creating new DHT"
   dht <- liftIO $ newDHT
   say "starting DHT Server"
   (mainDhtServerId, mainDhtMonitor) <- startMonitor dht $ dhtServer

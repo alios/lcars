@@ -8,6 +8,7 @@ module Lcars.DHT.Types ( DHTHash
                        , DHT(..)
                        , dhtLocalMapLength
                        , dhtLocalMapInsert
+                       , dhtLocalPutServerId
                        , DHTPut (..)
                        , dhtPeersCloser
                        , DHTConfig(..)
@@ -72,7 +73,10 @@ data DHTPeers h = DHTPeersState {
   dhtPeers :: Map h ServerId
 }
 
-
+dhtLocalPutServerId :: DHT h -> IO ServerId
+dhtLocalPutServerId dht = fmap fst $ atomically $ 
+                          readTMVar . dhtPutServer $ dht
+  
 dhtLocalMapLength :: DHT h -> IO Integer
 dhtLocalMapLength dht = 
   let lenfold = Map.foldl (\l bs -> l + (toInteger . BS.length $ bs)) 0 
@@ -125,6 +129,7 @@ dhtHashToInteger h =
 instance Binary DHTHash where
   put = put . dhtHashToInteger
   get = fmap dhtHashFromInteger get
+
 
 $(derive makeBinary ''DHTPutCommand)
 $(derive makeBinary ''DHTPutResponse)

@@ -56,7 +56,7 @@ dhtPutRequest n bs = do
           r -> fail $ "unexpected response on DHTPut: " ++ show r
     r -> fail $ "unexpected response on DHTPutRequest: " ++ show r
 
-dhtLocalProcess :: Process ()
+dhtLocalProcess :: Process ServerId
 dhtLocalProcess = do
   say "starting up local dht process"
   dhtS <- liftIO $ newDHT
@@ -65,6 +65,7 @@ dhtLocalProcess = do
   let dhtPutS = newDHTPut dhtS
   putSrv <- startMonitor dhtPutS $ dhtLocalPutServer
   liftIO $ atomically $ putTMVar (dhtPutServer dhtS) putSrv
+  return localDhtServerId
 
 
 newDHT :: IO (DHT DHTHash)
@@ -81,10 +82,15 @@ newDHTPut dht = DHTPutState {
   }
 
 
+
 dhtLocalServer :: LocalServer (DHT DHTHash)
 dhtLocalServer = defaultServer {
-  handlers = []
+  handlers = [handle $ handleLDHTPutCmdRequest ]
   }
+  where handleLDHTPutCmdRequest :: Handler (DHT DHTHash) DHTPutCommand DHTPutResponse
+        handleLDHTPutCmdRequest _ = do
+          ps <- fmap dhtLocalPutServerId getState >>= liftIO
+          GenServer.forward ps
 
 dhtLocalPutServer :: LocalServer (DHTPut DHTHash)
 dhtLocalPutServer = defaultServer {
