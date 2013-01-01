@@ -1,6 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable, TemplateHaskell #-}
 
-module Lcars.DHT.Types (DHTHash, DHT(..), DHTCommand(..), DHTResponse(..)) where
+module Lcars.DHT.Types ( DHTHash
+                       , DHT(..)
+                       , dhtLocalMapLength
+                       , DHTConfig(..)
+                       , defaultDHTConfig
+                       , DHTCommand(..)
+                       , DHTResponse(..)) where
 
 import Control.Distributed.Platform.GenServer
 
@@ -12,6 +18,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Tagged
 import Data.Typeable (Typeable)
 
@@ -38,8 +45,23 @@ data DHTResponse =
 
 data DHT h = DHT {
   dhtId :: h,
-  dhtLocalMap :: LocalDHT h
+  dhtConfig :: DHTConfig,
+  dhtLocalMap :: LocalDHT h,
+  dhtAllocators :: Map h DHTCommand
 }
+
+dhtLocalMapLength :: DHT h -> Integer
+dhtLocalMapLength dht = 
+  Map.foldl (\l bs -> l + (toInteger . BS.length $ bs)) 0 
+  $ dhtLocalMap dht
+
+data DHTConfig = DHTConfig {
+  dhtConfigMaxTableSize :: Integer
+}
+
+defaultDHTConfig :: DHTConfig
+defaultDHTConfig = DHTConfig 0
+
 
 $(derive makeBinary ''DHTCommand)
 $(derive makeBinary ''DHTResponse)
