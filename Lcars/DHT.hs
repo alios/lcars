@@ -1,5 +1,5 @@
 module Lcars.DHT ( DHT
-                 , newDHT
+                 , dhtLocalProcess
                  , dhtPutServer
                  , dhtRandomHash
                  , dhtHash
@@ -39,14 +39,14 @@ dhtPutRequest n bs = do
   pid <- getSelfPid
   let l = toInteger $ BS.length bs
   let callNode = GenServer.call n
-  respReq <- (callNode $ DHTPutRequest l rnd pid) :: Process DHTResponse
+  respReq <- (callNode $ DHTPutRequest l rnd pid) :: Process DHTPutResponse
   case (respReq) of
     DHTPutRequestAck putidReq -> do
       if (not $ putidReq == rnd) 
         then fail $ "expected DHTPutRequestAck for " ++ 
              show rnd ++ " received one for " ++ show putidReq
         else do
-        respPut <- (callNode $ DHTPut putidReq bs) :: Process DHTResponse
+        respPut <- (callNode $ DHTPut putidReq bs) :: Process DHTPutResponse
         case (respPut) of
           DHTPutDone putidPut h -> do
             if (putidPut == rnd) 
@@ -56,58 +56,64 @@ dhtPutRequest n bs = do
           r -> fail $ "unexpected response on DHTPut: " ++ show r
     r -> fail $ "unexpected response on DHTPutRequest: " ++ show r
 
+dhtLocalProcess :: Process ()
+dhtLocalProcess = do
+  say "starting up local dht process"
+  dhtS <- liftIO $ newDHT
+  (localDhtServerId, localDhtMonitor) <- 
+    startMonitor dhtS $ dhtLocalServer
+  let dhtPutS = newDHTPut dhtS
+  putSrv <- startMonitor dhtPutS $ dhtLocalPutServer
+  liftIO $ atomically $ putTMVar (dhtPutServer dhtS) putSrv
 
-{-
-dhtServer :: LocalServer (DHT DHTHash)
-dhtServer = defaultServer {
-  initHandler = do
-     startMonitor 
-     initOk Infinity
-  , 
-  handlers = []
-  }
--}
 
 newDHT :: IO (DHT DHTHash)
 newDHT = do
   nodeid <- dhtRandomHash
   localMap <- newTMVarIO $ Map.empty
-  return $ DHT nodeid defaultDHTConfig localMap Map.empty Map.empty
+  putSrv <- newEmptyTMVarIO
+  return $ DHTState nodeid defaultDHTConfig localMap putSrv
 
-
-dhtRedistributeServer :: LocalServer (DHT DHTHash)
-dhtRedistributeServer = defaultServer {
-  handlers = [handle handleDHTCmdRequest]
+newDHTPut :: DHT h -> DHTPut h
+newDHTPut dht = DHTPutState {
+  dhtPutParent = dht,
+  dhtPutAllocators = Map.empty
   }
 
-dhtPutServer :: LocalServer (DHT DHTHash)
-dhtPutServer = defaultServer {
-  handlers = [handle handleDHTCmdRequest]
+
+dhtLocalServer :: LocalServer (DHT DHTHash)
+dhtLocalServer = defaultServer {
+  handlers = []
   }
 
-handleDHTCmdRequest :: Handler (DHT DHTHash) DHTCommand DHTResponse
-handleDHTCmdRequest r@(DHTPutRequest l putid clientid) = do
+dhtLocalPutServer :: LocalServer (DHTPut DHTHash)
+dhtLocalPutServer = defaultServer {
+  handlers = [handle handleDHTPutCmdRequest]
+  }
+
+handleDHTPutCmdRequest :: Handler (DHTPut DHTHash) DHTPutCommand DHTPutResponse
+handleDHTPutCmdRequest r@(DHTPutRequest l putid clientid) = do
   trace $ "handling DHTPutRequest: " ++ show r
-  mapSizeIO <- fmap dhtLocalMapLength getState
+  mapSizeIO <- fmap (dhtLocalMapLength . dhtPutParent) getState
   mapSize <- liftIO $ mapSizeIO
-  maxMapSize <- fmap (dhtConfigMaxTableSize . dhtConfig) getState
+  maxMapSize <- fmap (dhtConfigMaxTableSize . dhtConfig . dhtPutParent ) getState
   if (maxMapSize > 0 && mapSize + l >= maxMapSize) 
     then fail $ "requested " ++ show l ++ " bytes, only " ++ 
          show (maxMapSize - mapSize) ++ " are availible"
     else do modifyState $ \dht -> dht { 
-              dhtAllocators = Map.insert putid r $ dhtAllocators dht 
+              dhtPutAllocators = Map.insert putid r $ dhtPutAllocators dht 
               }
             
             ok $ DHTPutRequestAck putid
 
-handleDHTCmdRequest r@(DHTPut putid bs) = do
+handleDHTPutCmdRequest r@(DHTPut putid bs) = do
   trace $ "handling DHTPut: " ++ show r
   let h = dhtHashStrict bs
-  dhtInsertIO <- fmap (\dht -> dhtLocalMapInsert dht h bs) getState
+  dhtInsertIO <- fmap (\st -> dhtLocalMapInsert (dhtPutParent st) h bs) getState
   liftIO $ dhtInsertIO
   modifyState $ 
     \dht -> dht { 
-      dhtAllocators = Map.delete putid $ dhtAllocators dht
+      dhtPutAllocators = Map.delete putid $ dhtPutAllocators dht
       }
   ok $ DHTPutDone putid h
 

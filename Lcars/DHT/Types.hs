@@ -1,18 +1,23 @@
-{-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances, 
+             DeriveDataTypeable, 
+             TemplateHaskell, 
+             MultiParamTypeClasses #-}
 
 module Lcars.DHT.Types ( DHTHash
                        , dhtHashDistance
                        , DHT(..)
                        , dhtLocalMapLength
                        , dhtLocalMapInsert
+                       , DHTPut (..)
                        , dhtPeersCloser
                        , DHTConfig(..)
                        , defaultDHTConfig
-                       , DHTCommand(..)
-                       , DHTResponse(..)) where
+                       , DHTPutCommand(..)
+                       , DHTPutResponse(..)) where
 
 import Control.Concurrent.STM
 import Control.Distributed.Platform.GenServer
+import Control.Distributed.Process
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
@@ -35,28 +40,38 @@ import Crypto.Types
 import Crypto.Classes
 import Crypto.Hash.Skein512 (Skein512)
 
+
 type DHTHash = Skein512
 type LocalDHT h = TMVar (Map h ByteString)
 type PutID = DHTHash
 
-data DHTCommand = 
+data DHTPutCommand = 
   DHTPutRequest !Integer !PutID !ServerId |  
-  DHTPut !PutID !ByteString |
-  DHTRedistribute !DHTHash
+  DHTPut !PutID !ByteString
   deriving (Eq, Typeable, Show)
 
-data DHTResponse = 
+data DHTPutResponse = 
   DHTPutRequestAck !PutID |
   DHTPutDone !PutID !DHTHash
   deriving (Eq, Typeable, Show)
 
-data DHT h = DHT {
+data DHT h = DHTState {
   dhtId :: h,
   dhtConfig :: DHTConfig,
   dhtLocalMap :: LocalDHT h,
-  dhtAllocators :: Map h DHTCommand,
+  dhtPutServer :: TMVar (ServerId, MonitorRef)
+}
+
+data DHTPut h = DHTPutState {
+  dhtPutParent :: DHT h,
+  dhtPutAllocators :: Map h DHTPutCommand
+}
+
+data DHTPeers h = DHTPeersState {
+  dhtPeersParent :: DHT h,
   dhtPeers :: Map h ServerId
 }
+
 
 dhtLocalMapLength :: DHT h -> IO Integer
 dhtLocalMapLength dht = 
@@ -69,9 +84,9 @@ dhtLocalMapInsert dht k v = atomically $ do
   m <- takeTMVar m'
   putTMVar m' $ Map.insert k v m
 
-dhtPeersCloser :: DHT DHTHash -> DHTHash -> [ServerId]  
+dhtPeersCloser :: DHTPeers DHTHash -> DHTHash -> [ServerId]  
 dhtPeersCloser dht h = 
-  let mydist = dhtHashDistance h $ dhtId dht
+  let mydist = dhtHashDistance h $ dhtId $ dhtPeersParent dht
       ks = Map.keysSet . dhtPeers $ dht
       fkl = 
         Set.toList  $ Set.filter 
@@ -111,6 +126,6 @@ instance Binary DHTHash where
   put = put . dhtHashToInteger
   get = fmap dhtHashFromInteger get
 
-$(derive makeBinary ''DHTCommand)
-$(derive makeBinary ''DHTResponse)
+$(derive makeBinary ''DHTPutCommand)
+$(derive makeBinary ''DHTPutResponse)
 
