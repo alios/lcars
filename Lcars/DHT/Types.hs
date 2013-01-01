@@ -1,22 +1,25 @@
-{-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable #-}
+{-# LANGUAGE TypeSynonymInstances, DeriveDataTypeable, TemplateHaskell #-}
 
 module Lcars.DHT.Types (DHTHash, DHT(..), DHTCommand(..), DHTResponse(..)) where
 
 import Control.Distributed.Platform.GenServer
 
-import Data.Binary (Binary(..), Get, Put)
-import qualified Data.Binary as Bin
-import qualified Data.Binary.Get as Bin
-import qualified Data.Binary.Put as Bin
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-import Data.Data (Data)
 import Data.Map (Map)
+import Data.Tagged
 import Data.Typeable (Typeable)
 
-import qualified Data.Serialize as Ser
+import Data.DeriveTH
 
+import qualified Data.Serialize as Ser
+import Crypto.Types
+import Crypto.Classes
 import Crypto.Hash.Skein512 (Skein512)
 
 type DHTHash = Skein512
@@ -24,7 +27,7 @@ type LocalDHT h = Map h ByteString
 type PutID = DHTHash
 
 data DHTCommand = 
-  DHTPutRequest !Integer !PutID !ServerId |
+  DHTPutRequest !Integer !PutID !ServerId |  
   DHTPut !PutID !ByteString
   deriving (Eq, Typeable, Show)
 
@@ -38,66 +41,49 @@ data DHT h = DHT {
   dhtLocalMap :: LocalDHT h
 }
 
+$(derive makeBinary ''DHTCommand)
+$(derive makeBinary ''DHTResponse)
 
-instance Binary DHTResponse where
-  put (DHTPutRequestAck putid) = do
-    put (0x42 :: Bin.Word8)
-    put putid
-  put (DHTPutDone putid h) = do
-    put (0x43 :: Bin.Word8)
-    put putid
-    put h
-  get = do
-    magic <- Bin.getWord8
-    case (magic) of 
-      0x42 -> fmap DHTPutRequestAck get
-      0x43 -> do 
-        putid <- get
-        h <- get
-        return $ DHTPutDone putid h
-        
-instance Binary DHTCommand where
-  put (DHTPutRequest l putid clientid) = do
-    put (0x23 :: Bin.Word8)
-    put l
-    put putid
-    put clientid
-  put (DHTPut putid bs) = do    
-    put (0x24 :: Bin.Word8)
-    put putid
-    put $ BS.length bs
-    put bs
-  get = do
-    magic <- Bin.getWord8
-    case (magic) of 
-      0x23 -> do
-        l <- get
-        putid <- get
-        clientid <- get
-        return $ DHTPutRequest l putid clientid
-      0x24 -> do                      
-        putid <- get :: Get PutID
-        let putid = undefined
-        l <- (get :: Get Int)
-        bs <- Bin.getBytes l
-        return $ DHTPut putid bs
-      i -> fail $ "unknown magic while parsing DHTCommand: " ++ show i
-      
-
+instance Num DHTHash where
+  a + b = fromInteger $ toInteger a + toInteger b
+  a * b = fromInteger $ toInteger a * toInteger b
+  abs = fromInteger . abs . toInteger
+  signum = fromInteger . signum . toInteger
+  fromInteger i = 
+    let bs = f (ol - 8) i
+        ol = unTagged (outputLength :: Tagged DHTHash BitLength) 
+        f l i = f' l i
+        f' (-8) _ = [] 
+        f' n i = (fromInteger ((i `shiftR` (n) ) .&. 0xff)) : f' (n-8) i
+    in either error id $ Ser.decode $ BS.pack bs
+  
+instance Enum DHTHash where
+  fromEnum = fromEnum . toInteger
+  toEnum = fromInteger . toEnum
+  
+instance Real DHTHash where
+  toRational = toRational . toInteger
+       
+instance Integral DHTHash where
+  toInteger h = 
+    foldl (\i w -> (i `shiftL` 8) .|. toInteger w) (0 :: Integer) $ 
+    BS.unpack $ Ser.encode h
+  quotRem a b = 
+    let (qi, ri) = quotRem (toInteger a) (toInteger b) 
+    in (fromInteger qi, fromInteger ri)
+  
 instance Binary DHTHash where
   put h =     
     let ser = Ser.encodeLazy h
     in do 
       put $ toInteger $ BL.length ser
-      Bin.putLazyByteString ser
+      putLazyByteString ser
   get = do
     ml <- get
     case (ml) of 
       Left err -> fail $ "unable to parse hash length: " ++ err
       Right l  -> 
-        do ser <- Bin.getLazyByteString $ fromInteger l
+        do ser <- getLazyByteString $ fromInteger l
            case (Ser.decodeLazy ser) of
              Left err -> fail $ "unable to parse hash: " ++ err
              Right h -> return h
-
-
