@@ -14,7 +14,7 @@ import qualified Data.Map as Map
 import Data.Typeable (Typeable)
 
 import Control.Concurrent.STM
-import Control.Distributed.Platform.GenServer as GenServer
+import Control.Distributed.Process.Platform.GenServer as GenServer
 import Control.Distributed.Process
 
 import Lcars.DHT.Classes
@@ -24,7 +24,7 @@ deriving instance Typeable LcarsDHTHash
 
 data DHTConfig = DHTConfig {
   dhtConfigMaxTableSize :: Integer
-}
+} deriving (Show, Eq)
 
 defaultDHTConfig :: DHTConfig
 defaultDHTConfig = DHTConfig 0
@@ -52,6 +52,7 @@ dhtNewLocalServerState cfg = do
   let ctx = DhtFunctorCtx undefined
   dht <- dhtNewNode ctx
   putServer <- liftIO $ newEmptyTMVarIO
+  say $ "created new server state"
   return $ MkDhtLocalServerState cfg dht putServer
 
 data DhtLocalPutServerState = DhtLocalPutServerState {
@@ -104,6 +105,7 @@ dhtStartLocalServerDefault = dhtStartLocalServer defaultDHTConfig
 
 dhtStartLocalServer :: DHTConfig -> Process ServerId
 dhtStartLocalServer cfg = do
+  say "starting up local DHT Server"
   servS <- dhtNewLocalServerState cfg
   localServerId <- startLink servS dhtLocalServer
   
@@ -111,5 +113,5 @@ dhtStartLocalServer cfg = do
   putServ <- startMonitor putServS dhtLocalPutServer 
   liftIO $ atomically $ putTMVar
     (dhtLocalServerStPutServer servS) putServ
-    
+  say $ "server startup done - server id: " ++ show localServerId
   return localServerId

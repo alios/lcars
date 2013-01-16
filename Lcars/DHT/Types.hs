@@ -32,7 +32,7 @@ import Crypto.Types
 import Crypto.Random.API
 import Crypto.Hash.Skein512 (Skein512)
 import Control.Monad.IO.Class
-import Control.Distributed.Platform.GenServer
+import Control.Distributed.Process.Platform.GenServer
 import Control.Distributed.Process
 
 import Lcars.DHT.Classes

@@ -32,9 +32,12 @@ class (MonadIO m, Functor m, Eq (DHTHash d), Ser.Serialize (DHTHash d)) =>
   dhtHashOutputBits :: d -> BitLength
   dhtHashOutputBytes :: d -> Int
   dhtDist :: d -> DHTHash d -> DHTHash d -> Integer
-  dhtTryPutRemote :: DhtFunctorCtx h -> DHTNodeAddress d -> DHTHash d -> t -> m (Maybe (DHTHash d))
+  dhtTryPutRemote :: 
+    DhtFunctorCtx h -> DHTNodeAddress d -> DHTHash d -> t -> 
+    m (Maybe (DHTHash d))
   dhtTryPutRemotes :: 
     d -> [DHTHash d] -> DHTHash d -> m (Maybe (DHTHash d))
+    
   dhtTryPutRemotes d ns' h = 
     let ns = sortBy (\n1 n2 -> compare (hdist n1) (hdist n2)) ns'
         hdist = dhtDist d h
@@ -70,11 +73,8 @@ class (MonadIO m, Functor m, Eq (DHTHash d), Ser.Serialize (DHTHash d)) =>
     in hfold $ take (dhtHashOutputBytes d) enc
        
   dhtDist d h1 h2 = 
-    let h1i = dhtHashI d h1
-        h2i = dhtHashI d h2
-        hmax = dhtHashMax d
-        d1 = abs $ h1i - h2i
-        d2 = hmax - d1
+    let d1 = abs $ (dhtHashI d h1) - (dhtHashI d h2)
+        d2 = (dhtHashMax d) - d1
     in min d1 d2
 
   dhtPut d bs =

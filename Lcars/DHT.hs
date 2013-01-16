@@ -1,8 +1,9 @@
 
-module Lcars.DHT () where
-
-import Data.ByteString (ByteString)
-import Crypto.Hash.Skein512 (Skein512)
+module Lcars.DHT 
+       ( module Lcars.DHT.Classes
+       , module Lcars.DHT.Types
+       , module Lcars.DHT.Servers
+       ) where
 
 import Lcars.DHT.Classes
 import Lcars.DHT.Types
