@@ -1,3 +1,15 @@
+
+module Lcars.DHT () where
+
+import Data.ByteString (ByteString)
+import Crypto.Hash.Skein512 (Skein512)
+
+import Lcars.DHT.Classes
+import Lcars.DHT.Types
+import Lcars.DHT.Servers
+
+
+{-
 module Lcars.DHT ( DHT
                  , dhtLocalProcess
                  , dhtPutServer
@@ -11,7 +23,7 @@ import Lcars.DHT.Types
 import Control.Concurrent.STM
 import Control.Distributed.Process
 import Control.Distributed.Platform.GenServer as GenServer
-import Control.Distributed.Platform.GenServer as GenServer
+
 import Crypto.Classes
 import Crypto.Types
 import Crypto.Random.API
@@ -22,17 +34,12 @@ import qualified Data.Map as Map
 import Data.Tagged
 import Control.Monad.IO.Class
 
-
+{-
 dhtRandomHash :: (MonadIO m, Functor m) => m DHTHash
 dhtRandomHash = do 
   fmap dhtHashStrict $ liftIO $ getSystemEntropy l
   where l = (untag $ (blockLength :: Tagged DHTHash BitLength)) `div` 8
-
-dhtHash :: BL.ByteString -> DHTHash
-dhtHash = hash
-
-dhtHashStrict :: ByteString -> DHTHash
-dhtHashStrict = dhtHash . BL.pack . BS.unpack
+-}
 dhtPutRequest :: ServerId -> ByteString -> Process DHTHash
 dhtPutRequest n bs = do
   rnd <- dhtRandomHash
@@ -92,7 +99,7 @@ dhtLocalServer = defaultServer {
           GenServer.forward ps
 
 dhtLocalPutServer :: LocalServer (DHTPut DHTHash)
-dhtLocalPutServer = defaultServer {
+                     dhtLocalPutServer = defaultServer {
   handlers = [handle handleDHTPutCmdRequest]
   }
 
@@ -123,4 +130,4 @@ handleDHTPutCmdRequest r@(DHTPut putid bs) = do
   ok $ DHTPutDone putid h
 
 
-  
+  -}

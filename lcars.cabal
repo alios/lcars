@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                lcars
-version:             0.2.0.0
+version:             0.3.0.0
 -- synopsis:            
 -- description:         
 homepage:            https://github.com/alios/lcars
@@ -18,8 +18,10 @@ cabal-version:       >=1.8
 library
   exposed-modules:   Lcars, 
                      Lcars.DHT,
-                     Lcars.DHT.Types, 
-                     Lcars.DHT.SimpleLocalnet
+                     Lcars.DHT.Classes,
+                     Lcars.DHT.Types,
+                     Lcars.DHT.Servers
+
   ghc-options:       -Wall -O2
   extensions:        TypeSynonymInstances
                ,     DeriveDataTypeable
