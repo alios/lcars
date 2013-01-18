@@ -8,6 +8,7 @@
  #-}
 
 module Lcars.DHT.Types ( DHT(..), LcarsDHTHash(..), LcarsDHT(..), DhtFunctorCtx(..)
+                       , DHTCommandDiscover(..), DHTCommandDiscoverResponse(..)                                           
                        , DHTCommandPut(..), DHTCommandPutResponse(..)
                        ) where
 
@@ -34,6 +35,7 @@ import Crypto.Hash.Skein512 (Skein512)
 import Control.Monad.IO.Class
 import Control.Distributed.Process.Platform.GenServer
 import Control.Distributed.Process
+import Control.Distributed.Backend.P2P
 
 import Lcars.DHT.Classes
 
@@ -56,6 +58,14 @@ instance (Hash ctx h) => DHT (DhtT h) h ByteString Process where
   data DhtFunctorCtx h = DhtFunctorCtx {
     dhtPutFunctor :: DHTNodeAddress (DhtT h) -> DHTHash (DhtT h) -> ByteString -> Process (Maybe h)
   }
+
+  dhtLocalMapSize dht@(DHT (_, lm, _, _)) =
+    let lmf f = fmap f $ readTMVar lm
+    in liftIO  . atomically $ do
+      kl <- lmf $ \m -> Map.size m * dhtHashOutputBytes dht
+      vl <- lmf $ sum . map BS.length . Map.elems
+      return $ toInteger $ vl + kl
+    
 
   dhtNodeId (DHT (h, _, _, _)) = h
   dhtFunctorContext (DHT (_, _, _, fctx)) = fctx
@@ -92,7 +102,11 @@ instance (Hash ctx h) => DHT (DhtT h) h ByteString Process where
 
 
 
-    
+data DHTCommandDiscover = MkDHTDiscover !LcarsDHTHash 
+                        deriving (Eq, Typeable, Show)
+data DHTCommandDiscoverResponse = MkDHTDiscoverResponse !LcarsDHTHash
+                                deriving (Eq, Typeable, Show)
+                                         
 data DHTCommandPut = 
   MkDHTPutRequest !Integer !LcarsDHTHash !ServerId |  
   MkDHTPut !LcarsDHTHash !ByteString
@@ -100,10 +114,23 @@ data DHTCommandPut =
                                
 data DHTCommandPutResponse =
   MkDHTPutRequestAck !LcarsDHTHash |
-  MkDHTPutDone !LcarsDHTHash !LcarsDHTHash
+  MkDHTPutDone !LcarsDHTHash !LcarsDHTHash |
+  MkDHTPutNack
   deriving (Eq, Typeable, Show)
 
+instance Binary DHTCommandDiscover where
+  put (MkDHTDiscover serverId) = do
+    { put (0x22 :: Word8); put $ Ser.encode serverId}
+  get = do
+    magic <- getWord8
+    case magic of
+      0x22 -> do
+        serverId <- getRemainingSer
+        return $ MkDHTDiscover serverId 
+                                                                                  
+
 instance Binary (DHTCommandPutResponse) where
+  put MkDHTPutNack = put (0x40 :: Word8)
   put (MkDHTPutRequestAck h) = do 
     { put (0x42 :: Word8); put $ Ser.encode h }  
   put (MkDHTPutDone h1 h2) = 
@@ -115,6 +142,7 @@ instance Binary (DHTCommandPutResponse) where
   get = do
     magic <- getWord8
     case magic of 
+      0x40 -> return $ MkDHTPutNack
       0x42 -> do
         h <- getRemainingSer
         return $ MkDHTPutRequestAck h
@@ -125,6 +153,7 @@ instance Binary (DHTCommandPutResponse) where
         h2 <- getNSer l2
         return $ MkDHTPutDone h1 h2
 
+  
 instance Binary DHTCommandPut where
   put (MkDHTPutRequest l h serverId) = do
     { put (0x23 :: Word8); put l; put serverId; put $ Ser.encode h }
@@ -159,3 +188,5 @@ getRemainingSer = do
   case h' of
     Left err -> fail err
     Right h -> return h
+
+

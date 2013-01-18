@@ -9,6 +9,7 @@ module Lcars.DHT.Servers ( DHTConfig(..), defaultDHTConfig
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Binary (Binary)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Typeable (Typeable)
@@ -38,18 +39,26 @@ data DhtLocalServerState = MkDhtLocalServerState {
 dhtNewLocalServerStateDefault :: Process DhtLocalServerState
 dhtNewLocalServerStateDefault = dhtNewLocalServerState defaultDHTConfig
 
-{-
-p :: ServerId -> LcarsDHTHash -> ByteString -> Process (Maybe h)
-p n k v = do
-  h <- undefined -- dhtRandomHash dht
-  pid <- getSelfPid
-  let putR
-  GenServer.call n (MkDHTPutRequest (toInteger . BS.length $ v) h pid)
-  -}
 
+putRequest :: ServerId -> LcarsDHTHash -> ByteString -> Process (Maybe h)
+putRequest n k v = do
+  pid <- getSelfPid
+  let l = toInteger . BS.length $ v
+  retReq <- GenServer.call n (MkDHTPutRequest l k pid) :: Process DHTCommandPutResponse
+  case retReq of
+    MkDHTPutRequestAck reqH -> do undefined
+    MkDHTPutNack -> return Nothing
+  return Nothing
+  
+
+
+
+--MkDHTPutRequest !Integer !LcarsDHTHash !ServerId |  
+  
+  
 dhtNewLocalServerState :: DHTConfig -> Process DhtLocalServerState
 dhtNewLocalServerState cfg = do
-  let ctx = DhtFunctorCtx undefined
+  let ctx = DhtFunctorCtx putRequest
   dht <- dhtNewNode ctx
   putServer <- liftIO $ newEmptyTMVarIO
   say $ "created new server state"
